@@ -4,7 +4,7 @@ embedding_model_context_window: 4096
 top_k: 10
 num_candidates: 50
 ensemble_method: "rrf"
-ranker_weights: {"faiss":1,"bm25":0,"index_keywords":0}
+ranker_weights: {"faiss":0,"bm25":0,"index_keywords":0,"grover":1}
 rrf_k: 60
 max_gen_tokens: 400
 chunk_mode: "recursive_sections"
@@ -19,7 +19,18 @@ rerank_top_k: 5
 use_double_prompt: false
 enable_history: true
 max_history_turns: 3
+<<<<<<< HEAD
 semantic_cache_enabled: false
 semantic_cache_bi_encoder_threshold: 0.90
 semantic_cache_cross_encoder_threshold: 0.99
 enable_topic_extraction: false
+=======
+enable_topic_extraction: true
+
+grover_embed_batch_size: 8
+grover_max_pool: 64
+grover_shots: 512
+grover_mark_top_m: 3
+grover_iterations: null
+grover_seed: null
+>>>>>>> Initial setup for quantum search

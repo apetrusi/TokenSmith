@@ -35,7 +35,14 @@ from src.feedback_store import (
 )
 from src.instrumentation.logging import get_logger
 from src.ranking.ranker import EnsembleRanker
-from src.retriever import filter_retrieved_chunks, BM25Retriever, FAISSRetriever, IndexKeywordRetriever, get_page_numbers, load_artifacts
+from src.retriever import (
+    BM25Retriever,
+    FAISSRetriever,
+    IndexKeywordRetriever,
+    filter_retrieved_chunks,
+    get_page_numbers,
+    load_artifacts,
+)
 from src.user_feedback_model import TopicExtractor, estimate_difficulty
 
 # Constants
@@ -218,11 +225,11 @@ async def lifespan(app: FastAPI):
             FAISSRetriever(faiss_index, _config.embed_model),
             BM25Retriever(bm25_index),
         ]
-        
-        # Add index keyword retriever if weight > 0
         if _config.ranker_weights.get("index_keywords", 0) > 0:
             _retrievers.append(
-                IndexKeywordRetriever(_config.extracted_index_path, _config.page_to_chunk_map_path)
+                IndexKeywordRetriever(
+                    _config.extracted_index_path, _config.page_to_chunk_map_path
+                )
             )
 
         _ranker = EnsembleRanker(

@@ -11,6 +11,7 @@ requires-python = ">=3.9"
 version = "0.1.0"
 dependencies = [
     "langchain-text-splitters>=0.0.8",
+    "qiskit>=1.0,<3",
 ]
 
 [project.scripts]

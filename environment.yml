@@ -33,3 +33,4 @@ dependencies:
     - pydantic
     - docling
     - markdown
+    - "qiskit>=1.0,<3"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 import yaml
 import pathlib
@@ -25,8 +25,20 @@ class RAGConfig:
     ensemble_method: str = "rrf"
     rrf_k: int = 60
     ranker_weights: Dict[str, float] = field(
-        default_factory=lambda: {"faiss": 1.0, "bm25": 0.0, "index_keywords": 0.0}
+        default_factory=lambda: {
+            "faiss": 1.0,
+            "bm25": 0.0,
+            "index_keywords": 0.0,
+            "grover": 0.0,
+        }
     )
+    # Grover retrieval vs classical FAISS/BM25 (ranker_weights)
+    grover_embed_batch_size: int = 8
+    grover_max_pool: int = 64
+    grover_shots: int = 512
+    grover_mark_top_m: int = 3
+    grover_iterations: Optional[int] = None
+    grover_seed: Optional[int] = None
     rerank_mode: str = ""
     rerank_top_k: int = 5
 
@@ -66,17 +78,35 @@ class RAGConfig:
     # ---------- factory + validation ----------
     @classmethod
     def from_yaml(cls, path: os.PathLike) -> RAGConfig:
+<<<<<<< HEAD
         with open(path, 'r') as f:
             data = yaml.safe_load(f)
+=======
+        with open(path, "r") as f:
+            data = yaml.safe_load(f) or {}
+>>>>>>> Initial setup for quantum search
         return cls(**data)
 
     def __post_init__(self):
         """Validation logic runs automatically after initialization."""
         assert self.top_k > 0, "top_k must be > 0"
         assert self.num_candidates >= self.top_k, "num_candidates must be >= top_k"
+<<<<<<< HEAD
         assert self.ensemble_method.lower() in {"linear", "weighted", "rrf"}
         assert self.embedding_model_context_window > 0, "embedding_model_context_window must be > 0"
         if self.ensemble_method.lower() in {"linear", "weighted"}:
+=======
+        assert self.ensemble_method.lower() in {"linear","weighted","rrf"}
+        _rw_defaults: Dict[str, float] = {
+            "faiss": 0.0,
+            "bm25": 0.0,
+            "index_keywords": 0.0,
+            "grover": 0.0,
+        }
+        merged_rw = {**_rw_defaults, **(self.ranker_weights or {})}
+        self.ranker_weights = merged_rw
+        if self.ensemble_method.lower() in {"linear","weighted"}:
+>>>>>>> Initial setup for quantum search
             s = sum(self.ranker_weights.values()) or 1.0
             self.ranker_weights = {k: v / s for k, v in self.ranker_weights.items()}
         self.chunk_config = self.get_chunk_config()

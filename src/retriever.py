@@ -7,11 +7,12 @@ It also contains helpers for loading artifacts and filtering chunks.
 
 from __future__ import annotations
 
+import math
 import pathlib
 import os
 import pickle
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Any, Collection, Dict, List, Optional, Tuple
 import nltk
 from nltk.stem import WordNetLemmatizer
 
@@ -279,3 +280,150 @@ class IndexKeywordRetriever(Retriever):
                 continue
             keywords.append(IndexKeywordRetriever._lemmatize_word(cleaned, lemmatizer))
         return keywords
+
+# Grover sampling, used by GroverRetriever
+def _grover_num_qubits_for_states(n_states: int) -> int:
+    if n_states <= 1:
+        return 1
+    return max(1, int(math.ceil(math.log2(n_states))))
+
+def _grover_default_iterations(n_states_pad: int, n_marked: int) -> int:
+    if n_states_pad <= 1 or n_marked <= 0:
+        return 0
+    ratio = n_states_pad / float(n_marked)
+    it = int(round((math.pi / 4.0) * math.sqrt(ratio)))
+    return max(1, min(it, 50))
+
+def _grover_measurement_distribution(
+    n_states: int,
+    marked_indices: Collection[int],
+    num_iterations: Optional[int] = None,
+) -> Tuple[np.ndarray, int]:
+    from qiskit import QuantumCircuit
+    from qiskit.circuit.library import Diagonal as DiagonalGate
+    from qiskit.circuit.library import GroverOperator
+    from qiskit.quantum_info import Statevector
+
+    if n_states <= 0:
+        return np.array([], dtype=np.float64), 0
+
+    n_qubits = _grover_num_qubits_for_states(n_states)
+    dim = 2**n_qubits
+    marked = {int(i) for i in marked_indices if 0 <= int(i) < n_states}
+    if not marked:
+        marked = {0}
+
+    diag = np.ones(dim, dtype=np.complex128)
+    for idx in marked:
+        if idx < dim:
+            diag[idx] = -1.0
+    oracle = QuantumCircuit(n_qubits)
+    oracle.append(DiagonalGate(diag.tolist()), range(n_qubits))
+    grover_op = GroverOperator(oracle)
+
+    iters = num_iterations
+    if iters is None:
+        iters = _grover_default_iterations(dim, len(marked))
+
+    qc = QuantumCircuit(n_qubits)
+    qc.h(range(n_qubits))
+    if iters > 0:
+        qc.compose(grover_op.power(iters), qubits=range(n_qubits), inplace=True)
+
+    sv = Statevector(qc)
+    probs = np.abs(sv.data) ** 2
+    return probs.real.astype(np.float64), n_qubits
+
+def _sample_grover_indices(
+    n_states: int,
+    marked_indices: Collection[int],
+    shots: int,
+    num_iterations: Optional[int] = None,
+    seed: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if n_states <= 0 or shots <= 0:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
+
+    probs, _ = _grover_measurement_distribution(
+        n_states, marked_indices, num_iterations=num_iterations
+    )
+    dim = probs.size
+    rng = np.random.default_rng(seed)
+    draws = rng.choice(dim, size=shots, p=probs)
+
+    mask = draws < n_states
+    filtered = draws[mask]
+    if filtered.size == 0:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
+
+    unique, counts = np.unique(filtered, return_counts=True)
+    return unique.astype(np.int64), counts.astype(np.int64)
+
+class GroverRetriever(Retriever):
+    """
+    Grover search over a capped chunk pool: cosine similarity marks states, Qiskit's
+    GroverOperator biases sampling; returned scores mix shot frequencies with a small
+    classical tie-break.
+    """
+
+    name = "grover"
+
+    def __init__(self, cfg: RAGConfig):
+        self.cfg = cfg
+        self._embedder = _get_embedder(cfg.embed_model)
+
+    def get_scores(
+        self,
+        query: str,
+        pool_size: int,
+        chunks: List[str],
+    ) -> Dict[int, float]:
+        if not chunks or pool_size <= 0:
+            return {}
+
+        cap = min(
+            len(chunks),
+            pool_size,
+            max(1, int(self.cfg.grover_max_pool)),
+        )
+        n = cap
+        pool = chunks[:n]
+
+        q = self._embedder.encode([query], normalize=True).astype(np.float32)
+        emb = self._embedder.encode(
+            pool,
+            normalize=True,
+            batch_size=max(1, int(self.cfg.grover_embed_batch_size)),
+        )
+        emb = np.asarray(emb, dtype=np.float32)
+        sims = (q @ emb.T).ravel()
+
+        m_mark = max(1, min(int(self.cfg.grover_mark_top_m), n))
+        marked = set(np.argpartition(-sims, kth=m_mark - 1)[:m_mark].tolist())
+
+        shots = max(1, int(self.cfg.grover_shots))
+        unique, counts = _sample_grover_indices(
+            n,
+            marked,
+            shots=shots,
+            num_iterations=self.cfg.grover_iterations,
+            seed=self.cfg.grover_seed,
+        )
+
+        pq = np.zeros(n, dtype=np.float64)
+        if unique.size > 0:
+            pq[unique] = counts.astype(np.float64) / float(shots)
+
+        sim_min, sim_max = float(sims.min()), float(sims.max())
+        if sim_max <= sim_min:
+            classical_norm = np.ones(n, dtype=np.float64)
+        else:
+            classical_norm = ((sims.astype(np.float64) - sim_min) / (sim_max - sim_min)).ravel()
+
+        tie = 1e-6
+        comb = pq + tie * classical_norm
+
+        k = min(pool_size, n)
+        top_local = np.argpartition(-comb, kth=k - 1)[:k]
+        global_indices = top_local.astype(int)
+        return {int(i): float(comb[i]) for i in global_indices}

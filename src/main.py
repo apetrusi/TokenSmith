@@ -20,12 +20,13 @@ from src.ranking.ranker import EnsembleRanker
 from src.preprocessing.chunking import DocumentChunker
 from src.query_enhancement import generate_hypothetical_document, contextualize_query
 from src.retriever import (
-    filter_retrieved_chunks, 
-    BM25Retriever, 
-    FAISSRetriever, 
-    IndexKeywordRetriever, 
-    get_page_numbers, 
-    load_artifacts
+    BM25Retriever,
+    FAISSRetriever,
+    GroverRetriever,
+    IndexKeywordRetriever,
+    filter_retrieved_chunks,
+    get_page_numbers,
+    load_artifacts,
 )
 from src.ranking.reranker import rerank
 from src.cache import get_cache
@@ -230,15 +231,17 @@ def get_answer(
             faiss_scores = raw_scores.get("faiss", {})
             bm25_scores = raw_scores.get("bm25", {})
             index_scores = raw_scores.get("index_keywords", {})
-            
-            faiss_ranked = sorted(faiss_scores.keys(), key=lambda i: faiss_scores[i], reverse=True)
-            bm25_ranked = sorted(bm25_scores.keys(), key=lambda i: bm25_scores[i], reverse=True)
-            index_ranked = sorted(index_scores.keys(), key=lambda i: index_scores[i], reverse=True)
-            
-            faiss_ranks = {idx: rank + 1 for rank, idx in enumerate(faiss_ranked)}
-            bm25_ranks = {idx: rank + 1 for rank, idx in enumerate(bm25_ranked)}
-            index_ranks = {idx: rank + 1 for rank, idx in enumerate(index_ranked)}
-            
+            grover_scores = raw_scores.get("grover", {})
+
+            def _ranks(scores: Dict[int, float]) -> Dict[int, int]:
+                ordered = sorted(scores.keys(), key=lambda i: scores[i], reverse=True)
+                return {idx: rank + 1 for rank, idx in enumerate(ordered)}
+
+            faiss_ranks = _ranks(faiss_scores)
+            bm25_ranks = _ranks(bm25_scores)
+            index_ranks = _ranks(index_scores)
+            grover_ranks = _ranks(grover_scores)
+
             chunks_info = []
             for rank, idx in enumerate(topk_idxs, 1):
                 chunks_info.append({
@@ -251,6 +254,8 @@ def get_answer(
                     "bm25_rank": bm25_ranks.get(idx, 0),
                     "index_score": index_scores.get(idx, 0),
                     "index_rank": index_ranks.get(idx, 0),
+                    "grover_score": grover_scores.get(idx, 0),
+                    "grover_rank": grover_ranks.get(idx, 0),
                 })
 
         # Step 3: Final re-ranking
@@ -381,10 +386,24 @@ def run_chat_session(args: argparse.Namespace, cfg: RAGConfig):
         cfg.page_to_chunk_map_path = cfg.get_page_to_chunk_map_path(artifacts_dir, args.index_prefix)
         faiss_idx, bm25_idx, chunks, sources, meta = load_artifacts(artifacts_dir, args.index_prefix)
         print(f"Loaded {len(chunks)} chunks and {len(sources)} sources from artifacts.")
-        retrievers = [FAISSRetriever(faiss_idx, cfg.embed_model), BM25Retriever(bm25_idx)]
-        if cfg.ranker_weights.get("index_keywords", 0) > 0:
-            retrievers.append(IndexKeywordRetriever(cfg.extracted_index_path, cfg.page_to_chunk_map_path))
-        
+        w = cfg.ranker_weights
+        retrievers = []
+        if w.get("faiss", 0) > 0:
+            retrievers.append(FAISSRetriever(faiss_idx, cfg.embed_model))
+        if w.get("bm25", 0) > 0:
+            retrievers.append(BM25Retriever(bm25_idx))
+        if w.get("index_keywords", 0) > 0:
+            retrievers.append(
+                IndexKeywordRetriever(cfg.extracted_index_path, cfg.page_to_chunk_map_path)
+            )
+        if w.get("grover", 0) > 0:
+            retrievers.append(GroverRetriever(cfg))
+        if not retrievers:
+            raise ValueError(
+                "No retrievers enabled: set at least one ranker_weights entry > 0 "
+                "(faiss, bm25, index_keywords, grover)."
+            )
+
         ranker = EnsembleRanker(ensemble_method=cfg.ensemble_method, weights=cfg.ranker_weights, rrf_k=int(cfg.rrf_k))
         print("Loaded retrievers and initialized ranker.")
         artifacts = {"chunks": chunks, "sources": sources, "retrievers": retrievers, "ranker": ranker, "meta": meta}
