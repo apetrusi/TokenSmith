@@ -28,9 +28,9 @@ enable_topic_extraction: false
 enable_topic_extraction: true
 
 grover_embed_batch_size: 8
-grover_max_pool: 64
-grover_shots: 512
-grover_mark_top_m: 3
-grover_iterations: null
+grover_max_pool: 32
+grover_shots: 64
+grover_mark_top_m: 2
+grover_iterations: 1
 grover_seed: null
 >>>>>>> Initial setup for quantum search
