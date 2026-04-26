@@ -1,0 +1,4 @@
+system,latency_ms_mean,latency_ms_std,chunks_accessed_mean,chunks_accessed_std,grover_embed_ms_mean,grover_sim_ms_mean,grover_post_ms_mean
+baseline,91.7751,0.8005,1744.00,0.00,0.0000,0.0000,0.0000
+grover_default,5.8302,1.2038,32.00,0.00,1.5851,4.1919,0.0177
+grover_best_sweep,3.3364,0.0080,16.00,0.00,0.8022,2.4980,0.0145

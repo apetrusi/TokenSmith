@@ -1,5 +1,6 @@
 import sqlite3
 import hashlib
+import os
 import multiprocessing
 import multiprocessing.pool
 import numpy as np
@@ -67,7 +68,7 @@ class SentenceTransformer:
             embedding=True,
             verbose=False,
             use_mmap=True,
-            n_gpu_layers=-1,
+            n_gpu_layers=int(os.getenv("TOKENSMITH_EMBED_N_GPU_LAYERS", "-1")),
         )
         self._embedding_dimension = None
 

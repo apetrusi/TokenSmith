@@ -1,0 +1,242 @@
+[
+  {
+    "id": "q1",
+    "query": "What is database normalization?",
+    "relevant_chunk_ids": [
+      28,
+      433
+    ]
+  },
+  {
+    "id": "q2",
+    "query": "Explain ACID properties in transaction processing.",
+    "relevant_chunk_ids": [
+      1045,
+      1055
+    ]
+  },
+  {
+    "id": "q3",
+    "query": "What is the purpose of an index in a database?",
+    "relevant_chunk_ids": [
+      204,
+      814
+    ]
+  },
+  {
+    "id": "q4",
+    "query": "What is a primary key and why is it important?",
+    "relevant_chunk_ids": [
+      312,
+      313
+    ]
+  },
+  {
+    "id": "q5",
+    "query": "What is a foreign key constraint?",
+    "relevant_chunk_ids": [
+      178,
+      82
+    ]
+  },
+  {
+    "id": "q6",
+    "query": "How does a transaction differ from a regular query?",
+    "relevant_chunk_ids": [
+      169,
+      1045
+    ]
+  },
+  {
+    "id": "q7",
+    "query": "What is serializability in database systems?",
+    "relevant_chunk_ids": [
+      1094,
+      1262
+    ]
+  },
+  {
+    "id": "q8",
+    "query": "What are common SQL join types and when are they used?",
+    "relevant_chunk_ids": [
+      158,
+      155
+    ]
+  },
+  {
+    "id": "q9",
+    "query": "What is the difference between clustered and non-clustered indexes?",
+    "relevant_chunk_ids": [
+      1626,
+      1356
+    ]
+  },
+  {
+    "id": "q10",
+    "query": "What is a query execution plan?",
+    "relevant_chunk_ids": [
+      1011,
+      892
+    ]
+  },
+  {
+    "id": "q11",
+    "query": "What causes deadlocks and how can they be handled?",
+    "relevant_chunk_ids": [
+      1477,
+      1478
+    ]
+  },
+  {
+    "id": "q12",
+    "query": "What is two-phase locking?",
+    "relevant_chunk_ids": [
+      1094,
+      1095
+    ]
+  },
+  {
+    "id": "q13",
+    "query": "What is multiversion concurrency control (MVCC)?",
+    "relevant_chunk_ids": [
+      1163,
+      1510
+    ]
+  },
+  {
+    "id": "q14",
+    "query": "What is the difference between OLTP and OLAP workloads?",
+    "relevant_chunk_ids": [
+      683,
+      684
+    ]
+  },
+  {
+    "id": "q15",
+    "query": "How do B-trees support efficient range queries?",
+    "relevant_chunk_ids": [
+      884,
+      1322
+    ]
+  },
+  {
+    "id": "q16",
+    "query": "What is a hash index and when is it useful?",
+    "relevant_chunk_ids": [
+      1599,
+      814
+    ]
+  },
+  {
+    "id": "q17",
+    "query": "What is denormalization and why might it be used?",
+    "relevant_chunk_ids": [
+      438,
+      433
+    ]
+  },
+  {
+    "id": "q18",
+    "query": "What is functional dependency in schema design?",
+    "relevant_chunk_ids": [
+      397,
+      389
+    ]
+  },
+  {
+    "id": "q19",
+    "query": "What are update anomalies and how does normalization reduce them?",
+    "relevant_chunk_ids": [
+      375,
+      397
+    ]
+  },
+  {
+    "id": "q20",
+    "query": "What is the role of a buffer pool in a DBMS?",
+    "relevant_chunk_ids": [
+      1218,
+      1221
+    ]
+  },
+  {
+    "id": "q21",
+    "query": "How does write-ahead logging (WAL) work?",
+    "relevant_chunk_ids": [
+      1216,
+      1217
+    ]
+  },
+  {
+    "id": "q22",
+    "query": "What is checkpointing in crash recovery?",
+    "relevant_chunk_ids": [
+      1210,
+      1223
+    ]
+  },
+  {
+    "id": "q23",
+    "query": "What is the difference between logical and physical data independence?",
+    "relevant_chunk_ids": [
+      15,
+      18
+    ]
+  },
+  {
+    "id": "q24",
+    "query": "How does a cost-based query optimizer choose a plan?",
+    "relevant_chunk_ids": [
+      1011,
+      892
+    ]
+  },
+  {
+    "id": "q25",
+    "query": "What is cardinality estimation and why does it matter?",
+    "relevant_chunk_ids": [
+      993,
+      994
+    ]
+  },
+  {
+    "id": "q26",
+    "query": "What is an aggregate operator in relational algebra?",
+    "relevant_chunk_ids": [
+      62,
+      1014
+    ]
+  },
+  {
+    "id": "q27",
+    "query": "What is a materialized view and when should it be used?",
+    "relevant_chunk_ids": [
+      164,
+      1018
+    ]
+  },
+  {
+    "id": "q28",
+    "query": "What are common database partitioning strategies?",
+    "relevant_chunk_ids": [
+      601,
+      1317
+    ]
+  },
+  {
+    "id": "q29",
+    "query": "What is replication and how does it improve availability?",
+    "relevant_chunk_ids": [
+      1335,
+      1519
+    ]
+  },
+  {
+    "id": "q30",
+    "query": "What are trade-offs between consistency and availability in distributed databases?",
+    "relevant_chunk_ids": [
+      1519,
+      1302
+    ]
+  }
+]

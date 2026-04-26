@@ -1,0 +1,4 @@
+system,precision_at_k_mean,precision_at_k_std,recall_at_k_mean,recall_at_k_std,mrr_mean,mrr_std
+baseline,0.0067,0.0000,0.0333,0.0000,0.0444,0.0000
+grover_default,0.0067,0.0000,0.0333,0.0000,0.0333,0.0000
+grover_best_sweep,0.0033,0.0000,0.0167,0.0000,0.0333,0.0000

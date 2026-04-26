@@ -397,7 +397,7 @@ def run_chat_session(args: argparse.Namespace, cfg: RAGConfig):
                 IndexKeywordRetriever(cfg.extracted_index_path, cfg.page_to_chunk_map_path)
             )
         if w.get("grover", 0) > 0:
-            retrievers.append(GroverRetriever(cfg))
+            retrievers.append(GroverRetriever(cfg, faiss_index=faiss_idx, bm25_index=bm25_idx))
         if not retrievers:
             raise ValueError(
                 "No retrievers enabled: set at least one ranker_weights entry > 0 "

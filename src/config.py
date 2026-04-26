@@ -78,25 +78,16 @@ class RAGConfig:
     # ---------- factory + validation ----------
     @classmethod
     def from_yaml(cls, path: os.PathLike) -> RAGConfig:
-<<<<<<< HEAD
-        with open(path, 'r') as f:
-            data = yaml.safe_load(f)
-=======
         with open(path, "r") as f:
             data = yaml.safe_load(f) or {}
->>>>>>> Initial setup for quantum search
         return cls(**data)
 
     def __post_init__(self):
         """Validation logic runs automatically after initialization."""
         assert self.top_k > 0, "top_k must be > 0"
         assert self.num_candidates >= self.top_k, "num_candidates must be >= top_k"
-<<<<<<< HEAD
         assert self.ensemble_method.lower() in {"linear", "weighted", "rrf"}
         assert self.embedding_model_context_window > 0, "embedding_model_context_window must be > 0"
-        if self.ensemble_method.lower() in {"linear", "weighted"}:
-=======
-        assert self.ensemble_method.lower() in {"linear","weighted","rrf"}
         _rw_defaults: Dict[str, float] = {
             "faiss": 0.0,
             "bm25": 0.0,
@@ -105,8 +96,7 @@ class RAGConfig:
         }
         merged_rw = {**_rw_defaults, **(self.ranker_weights or {})}
         self.ranker_weights = merged_rw
-        if self.ensemble_method.lower() in {"linear","weighted"}:
->>>>>>> Initial setup for quantum search
+        if self.ensemble_method.lower() in {"linear", "weighted"}:
             s = sum(self.ranker_weights.values()) or 1.0
             self.ranker_weights = {k: v / s for k, v in self.ranker_weights.items()}
         self.chunk_config = self.get_chunk_config()

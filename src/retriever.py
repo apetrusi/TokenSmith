@@ -33,6 +33,23 @@ from qiskit.quantum_info import Statevector
 
 _EMBED_CACHE: Dict[str, CachedEmbedder] = {}
 
+def _lexical_similarity_scores(query: str, docs: List[str]) -> np.ndarray:
+    """Fallback scorer that avoids embedding-model runtime dependencies."""
+    q_tokens = preprocess_for_bm25(query)
+    q_set = set(q_tokens)
+    if not q_set:
+        return np.zeros(len(docs), dtype=np.float32)
+    sims = np.zeros(len(docs), dtype=np.float32)
+    for i, doc in enumerate(docs):
+        d_tokens = preprocess_for_bm25(doc)
+        if not d_tokens:
+            continue
+        d_set = set(d_tokens)
+        inter = len(q_set & d_set)
+        union = max(1, len(q_set | d_set))
+        sims[i] = float(inter) / float(union)
+    return sims
+
 def _get_embedder(model_name: str) -> CachedEmbedder:
     if model_name not in _EMBED_CACHE:
         # Use the cached embedding model to avoid reloading it on every call
@@ -97,7 +114,8 @@ class FAISSRetriever(Retriever):
 
     def __init__(self, index, embed_model: str):
         self.index = index
-        self.embedder = _get_embedder(embed_model)
+        self.lexical_only = os.getenv("TOKENSMITH_LEXICAL_ONLY", "0") == "1"
+        self.embedder = None if self.lexical_only else _get_embedder(embed_model)
 
     def get_scores(self,
                 query: str,
@@ -106,29 +124,23 @@ class FAISSRetriever(Retriever):
         """
         Returns FAISS scores for top 'pool_size' keyed by global chunk index.
         """
-        # FAISS expects a 2D array
+        if self.lexical_only:
+            sims = _lexical_similarity_scores(query, chunks)
+            num_candidates = min(pool_size, len(sims))
+            if num_candidates <= 0:
+                return {}
+            top_k_indices = np.argpartition(-sims, kth=num_candidates - 1)[:num_candidates]
+            return {int(idx): float(sims[idx]) for idx in top_k_indices}
+
         q_vec = self.embedder.encode([query]).astype("float32")
-        
-        # Safety check on vector dimensions
-        if q_vec.shape[1] !=  self.index.d:
+        if q_vec.shape[1] != self.index.d:
             raise ValueError(
-                f"Embedding dim mismatch: index={ self.index.d} vs query={q_vec.shape[1]}"
+                f"Embedding dim mismatch: index={self.index.d} vs query={q_vec.shape[1]}"
             )
-
-        # Perform the search
-        distances, indices =  self.index.search(q_vec, pool_size)
-
-        # Remove invalid indices and ensure they are within bounds
+        distances, indices = self.index.search(q_vec, pool_size)
         cand_idxs = [i for i in indices[0] if 0 <= i < len(chunks)]
-
-        # Create the distance dictionary, ensuring we only include valid candidates
         dists = {idx: float(dist) for idx, dist in zip(cand_idxs, distances[0][:len(cand_idxs)])}
-
-        # Invert distance to score: 1 / (1 + distance). Adding 1 avoids division by zero.
-        return {
-            idx: 1.0 / (1.0 + dist)
-            for idx, dist in dists.items()
-        }
+        return {idx: 1.0 / (1.0 + dist) for idx, dist in dists.items()}
 
 
 class BM25Retriever(Retriever):
@@ -295,15 +307,65 @@ class GroverRetriever(Retriever):
 
     name = "grover"
 
-    def __init__(self, cfg: RAGConfig):
+    def __init__(self, cfg: RAGConfig, faiss_index: Any = None, bm25_index: Any = None):
         self.cfg = cfg
-        self._embedder = _get_embedder(cfg.embed_model)
+        self.faiss_index = faiss_index
+        self.bm25_index = bm25_index
+        self.lexical_only = os.getenv("TOKENSMITH_LEXICAL_ONLY", "0") == "1"
+        self._embedder = None if self.lexical_only else _get_embedder(cfg.embed_model)
         self.last_timing_ms: Dict[str, float] = {
             "embedding_ms": 0.0,
             "grover_sim_ms": 0.0,
             "postprocess_ms": 0.0,
             "total_ms": 0.0,
         }
+
+    def _prefilter_candidate_indices(
+        self,
+        query: str,
+        pool_size: int,
+        chunks: List[str],
+    ) -> List[int]:
+        cap = min(
+            len(chunks),
+            pool_size,
+            max(1, int(self.cfg.grover_max_pool)),
+        )
+        if cap <= 0:
+            return []
+
+        # Use BM25 as cheap lexical prefilter when available
+        if self.bm25_index is not None:
+            tokenized_query = preprocess_for_bm25(query)
+            all_scores = self.bm25_index.get_scores(tokenized_query)
+            num_candidates = min(cap, len(all_scores))
+            if num_candidates <= 0:
+                return []
+            top_idx = np.argpartition(-all_scores, kth=num_candidates - 1)[:num_candidates]
+            return [int(i) for i in top_idx if 0 <= int(i) < len(chunks)]
+
+        # Fall back to FAISS prefilter if BM25 is not available
+        if self.faiss_index is not None and not self.lexical_only:
+            q_vec = self._embedder.encode([query]).astype("float32")
+            distances, indices = self.faiss_index.search(q_vec, cap)
+            cand_idxs = [int(i) for i in indices[0] if 0 <= int(i) < len(chunks)]
+            # Preserve FAISS rank order and remove duplicates
+            seen = set()
+            ordered_unique: List[int] = []
+            for idx in cand_idxs:
+                if idx in seen:
+                    continue
+                seen.add(idx)
+                ordered_unique.append(idx)
+            return ordered_unique
+
+        # Last option: lexical top-k over full chunk list
+        sims = _lexical_similarity_scores(query, chunks)
+        num_candidates = min(cap, len(sims))
+        if num_candidates <= 0:
+            return []
+        top_idx = np.argpartition(-sims, kth=num_candidates - 1)[:num_candidates]
+        return [int(i) for i in top_idx if 0 <= int(i) < len(chunks)]
 
     def get_scores(
         self,
@@ -323,24 +385,31 @@ class GroverRetriever(Retriever):
             }
             return {}
 
-        cap = min(
-            len(chunks),
-            pool_size,
-            max(1, int(self.cfg.grover_max_pool)),
-        )
-        n = cap
-        pool = chunks[:n]
+        candidate_indices = self._prefilter_candidate_indices(query, pool_size, chunks)
+        n = len(candidate_indices)
+        if n<=0:
+            self.last_timing_ms = {
+                "embedding_ms": 0.0,
+                "grover_sim_ms": 0.0,
+                "postprocess_ms": 0.0,
+                "total_ms": (time.perf_counter() - total_t0) * 1000.0,
+            }
+            return {}
+        pool = [chunks[i] for i in candidate_indices]
 
         t0 = time.perf_counter()
-        q = self._embedder.encode([query], normalize=True).astype(np.float32)
-        emb = self._embedder.encode(
-            pool,
-            normalize=True,
-            batch_size=max(1, int(self.cfg.grover_embed_batch_size)),
-        )
-        emb = np.asarray(emb, dtype=np.float32)
-        sims = (q @ emb.T).ravel()
-        embedding_ms = (time.perf_counter() - t0) * 1000.0
+        if self.lexical_only:
+            sims = _lexical_similarity_scores(query, pool).astype(np.float32)
+        else:
+            q = self._embedder.encode([query], normalize=True).astype(np.float32)
+            emb = self._embedder.encode(
+                pool,
+                normalize=True,
+                batch_size=max(1, int(self.cfg.grover_embed_batch_size)),
+            )
+            emb = np.asarray(emb, dtype=np.float32)
+            sims = (q @ emb.T).ravel()
+        embedding_ms = (time.perf_counter()-t0)*1000.0
 
         m_mark = max(1, min(int(self.cfg.grover_mark_top_m), n))
         marked = set(np.argpartition(-sims, kth=m_mark - 1)[:m_mark].tolist())
@@ -372,8 +441,10 @@ class GroverRetriever(Retriever):
 
         k = min(pool_size, n)
         top_local = np.argpartition(-comb, kth=k - 1)[:k]
-        global_indices = top_local.astype(int)
-        result = {int(i): float(comb[i]) for i in global_indices}
+        result = {
+            int(candidate_indices[int(local_i)]): float(comb[int(local_i)])
+            for local_i in top_local
+        }
         postprocess_ms = (time.perf_counter() - t0) * 1000.0
 
         self.last_timing_ms = {
